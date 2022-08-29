@@ -28,7 +28,7 @@ import pymel.core as pm
 import maya.cmds as cmds
 import maya.mel as mel
 
-ddhud_path = r'D:\ScriptProjs\XYY\playblast\playblast'
+ddhud_path = r'\\172.22.5.10\software\XYYScript'
 
 class PlayblastCustomPresets(object):
 
@@ -1427,8 +1427,10 @@ class playblastWidget(QWidget):
             camera = None
         
         if cmds.objExists('camera_hud'):
-            if camera != "<Active>":
+            if camera:
                 cmds.setAttr('camera_hud.text',camera,type='string')
+            else:
+                cmds.setAttr('camera_hud.text','',type='string')
 
         self._playblast.set_camera(camera)
         self.update_cam_fl(camera)
