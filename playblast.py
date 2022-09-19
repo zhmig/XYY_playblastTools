@@ -351,6 +351,9 @@ class ShotMask(object):
             frame_exp = ('\"string $num = `currentTime -q`;\n' +
                         'string $pad = `python (\"\'%04d\' % \"+$num)`;\n' +
                         'setAttr -type \"string\" frame_hud.text (\"%s:\" + $pad);\"' % frame_text)
+                        
+            if cmds.objExists("frame_hud_exp"):
+                cmds.delete("frame_hud_exp")
 
             cmds.expression(o="",n="frame_hud_exp",ae=1,uc=all,s=frame_exp)
         except:
@@ -608,8 +611,8 @@ class Playblast(QObject):
             self.log_error("Camera does not exist: {0}".format(camera))
             return
 
-        output_dir = self.resolve_output_directory_path(output_dir)
-        filename = self.resolve_output_filename(filename, camera)
+        output_dir = self.resolve_output_directory_path(output_dir).encode('utf-8')
+        filename = self.resolve_output_filename(filename, camera).encode('utf-8')
 
         if padding <= 0:
             padding = Playblast.DEFAULT_PADDING
@@ -1362,6 +1365,7 @@ class playblastWidget(QWidget):
 
     def do_playblast(self):
         if not cmds.objExists('ddhud_grp'):
+            cmds.confirmDialog( t=u'警告', m=u'未检测到HUD 信息\n无法正常拍屏!!',icn='warning', b=['Yes'], db='Yes', ds='No' )
             return
         all_file_path = self.output_path_tx.text()
         if not all_file_path:
@@ -1702,16 +1706,16 @@ class PlayblastUI(QWidget):
         pass
 
     # 点击时间，点击刷新设置
-    def event(self, e):
-        if e.type() == QEvent.WindowActivate:
-            if self.playblast_wdg.isVisible():
-                self.playblast_wdg.refresh_all()
+    # def event(self, e):
+    #     if e.type() == QEvent.WindowActivate:
+    #         if self.playblast_wdg.isVisible():
+    #             self.playblast_wdg.refresh_all()
 
-        # elif e.type() == QEvent.WindowDeactivate:
-        #     if self.playblast_wdg.isVisible():
-        #         self.playblast_wdg.save_settings()
+    #     # elif e.type() == QEvent.WindowDeactivate:
+    #     #     if self.playblast_wdg.isVisible():
+    #     #         self.playblast_wdg.save_settings()
 
-        return super(PlayblastUI, self).event(e)
+    #     return super(PlayblastUI, self).event(e)
 
 if __name__ == "__main__":
     workspace_control_name = PlayblastUI.get_workspace_control_name()
