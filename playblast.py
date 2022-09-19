@@ -28,7 +28,7 @@ import pymel.core as pm
 import maya.cmds as cmds
 import maya.mel as mel
 
-ddhud_path = r'\\172.22.5.10\software\XYYScript'
+ddhud_path = r'Z:\Project\ScriptProjs\XYY\playblast\playblast'
 
 class PlayblastCustomPresets(object):
 
@@ -403,7 +403,6 @@ class Playblast(QObject):
     VIDEO_ENCODER_LOOKUP = {
         "mov": ["h264"],
         "mp4": ["h264"],
-        "Image": ["jpg", "png", "tif"],
     }
 
     H264_QUALITIES = {
@@ -426,7 +425,7 @@ class Playblast(QObject):
     DEFAULT_RESOLUTION = "Render"
     DEFAULT_FRAME_RANGE = "Playback"
 
-    DEFAULT_CONTAINER = "mp4"
+    DEFAULT_CONTAINER = "mov"
     DEFAULT_ENCODER = "h264"
     DEFAULT_H264_QUALITY = "Very High"
     DEFAULT_H264_PRESET = "fast"
@@ -947,11 +946,98 @@ class Playblast(QObject):
 
         self.output_logged.emit(text)  # pylint: disable=E1101
 
+class PlayblastEncoderSettingsDialog(QDialog):
+
+    ENCODER_PAGES = {
+        "h264": 0,
+    }
+
+    H264_QUALITIES = [
+        "Very High",
+        "High",
+        "Medium",
+        "Low",
+    ]
+
+
+    def __init__(self, parent):
+        super(PlayblastEncoderSettingsDialog, self).__init__(parent)
+
+        self.setWindowTitle("Encoder Settings")
+        self.setWindowFlags(self.windowFlags() ^ Qt.WindowContextHelpButtonHint)
+        self.setModal(True)
+        self.setMinimumWidth(220)
+
+        self.create_widgets()
+        self.create_layouts()
+        self.create_connections()
+
+    def create_widgets(self):
+        # h264
+        self.h264_quality_combo = QComboBox()
+        self.h264_quality_combo.addItems(PlayblastEncoderSettingsDialog.H264_QUALITIES)
+
+        self.h264_preset_combo = QComboBox()
+        self.h264_preset_combo.addItems(Playblast.H264_PRESETS)
+
+        h264_layout = QFormLayout()
+        h264_layout.addRow("Quality:", self.h264_quality_combo)
+        h264_layout.addRow("Preset:", self.h264_preset_combo)
+
+        h264_settings_wdg = QGroupBox("h264 Options")
+        h264_settings_wdg.setLayout(h264_layout)
+
+        self.settings_stacked_wdg = QStackedWidget()
+        self.settings_stacked_wdg.addWidget(h264_settings_wdg)
+
+        self.accept_btn = QPushButton("Accept")
+        self.cancel_btn = QPushButton("Cancel")
+
+    def create_layouts(self):
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.accept_btn)
+        button_layout.addWidget(self.cancel_btn)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(2, 2, 2, 2)
+        main_layout.setSpacing(4)
+        main_layout.addWidget(self.settings_stacked_wdg)
+        main_layout.addLayout(button_layout)
+
+    def create_connections(self):
+        self.accept_btn.clicked.connect(self.accept)
+        self.cancel_btn.clicked.connect(self.close)
+
+
+    def set_page(self, page):
+        if not page in PlayblastEncoderSettingsDialog.ENCODER_PAGES:
+            return False
+
+        self.settings_stacked_wdg.setCurrentIndex(PlayblastEncoderSettingsDialog.ENCODER_PAGES[page])
+        return True
+
+    def set_h264_settings(self, quality, preset):
+        self.h264_quality_combo.setCurrentText(quality)
+        self.h264_preset_combo.setCurrentText(preset)
+
+    def get_h264_settings(self):
+        return {
+            "quality": self.h264_quality_combo.currentText(),
+            "preset": self.h264_preset_combo.currentText(),
+        }
+
+
 # 主控件 功能
 class playblastWidget(QWidget):
     
     HUD_LOCATION_RANGE = [0,200]
-    
+
+    CONTAINER_PRESETS = [
+    "mov",
+    "mp4",
+    ]   
+
     collapsed_state_changed = Signal()
 
     def __init__(self, parent=None):
@@ -968,6 +1054,10 @@ class playblastWidget(QWidget):
     def create_widgets(self):
         button_height = 19
         combo_box_min_width = 100
+
+
+        self._settings_dialog = None
+        self._encoder_settings_dialog = None
 
         self.output_path_label = QLabel(u'输出路径')
         self.output_path_tx = QLineEdit()
@@ -1007,6 +1097,16 @@ class playblastWidget(QWidget):
         self.camera_select_cmb.setMinimumWidth(combo_box_min_width)
         self.camera_select_hide_defaults_cb = QCheckBox("Hide defaults")
         self.refresh_cameras()
+
+        self.encoding_container_cmb = QComboBox()
+        self.encoding_container_cmb.setMinimumWidth(combo_box_min_width)
+        self.encoding_container_cmb.addItems(playblastWidget.CONTAINER_PRESETS)
+        self.encoding_container_cmb.setCurrentText(Playblast.DEFAULT_CONTAINER)
+
+        self.encoding_video_codec_cmb = QComboBox()
+        self.encoding_video_codec_cmb.setMinimumWidth(combo_box_min_width)
+        self.encoding_video_codec_settings_btn = QPushButton("Settings...")
+        self.encoding_video_codec_settings_btn.setFixedHeight(button_height)
 
         self.company_tx = QLineEdit()
         self.company_name_X_slider = QSlider()
@@ -1166,10 +1266,18 @@ class playblastWidget(QWidget):
         camera_options_layout.addWidget(self.camera_select_hide_defaults_cb)
         camera_options_layout.addStretch()
 
+        encoding_layout = QHBoxLayout()
+        encoding_layout.setSpacing(2)
+        encoding_layout.addWidget(self.encoding_container_cmb)
+        encoding_layout.addWidget(self.encoding_video_codec_cmb)
+        encoding_layout.addWidget(self.encoding_video_codec_settings_btn)
+        encoding_layout.addStretch()
+
         global_layout = playblastFormLayout()
         # options_layout.setVerticalSpacing(5)
         global_layout.addLayoutRow(0, u"输出尺寸:", resolution_layout)
         global_layout.addLayoutRow(1, "Camera:", camera_options_layout)
+        global_layout.addLayoutRow(2, "Encoding:", encoding_layout)
 
         self.global_GB = QGroupBox(u'全局设置')
         self.global_GB.setStyleSheet("QGroupBox{\n"
@@ -1315,6 +1423,10 @@ class playblastWidget(QWidget):
         self.camera_select_cmb.currentTextChanged.connect(self.on_camera_changed)
         self.camera_select_hide_defaults_cb.toggled.connect(self.refresh_cameras)
 
+        self.encoding_container_cmb.currentTextChanged.connect(self.refresh_video_encoders)
+        self.encoding_video_codec_cmb.currentTextChanged.connect(self.on_video_encoder_changed)
+        self.encoding_video_codec_settings_btn.clicked.connect(self.show_encoder_settings_dialog)
+
         self.resolution_select_cmb.currentTextChanged.connect(self.refresh_resolution)
         self.resolution_width_sb.editingFinished.connect(self.on_resolution_changed)
         self.resolution_height_sb.editingFinished.connect(self.on_resolution_changed)
@@ -1391,11 +1503,14 @@ class playblastWidget(QWidget):
             current_dir_path = self._playblast.get_project_dir_path()
 
         new_dir_path = QFileDialog.getExistingDirectory(self, "Select Directory", current_dir_path)
+
+        suffix_name = self.encoding_container_cmb.currentText()
+
         if new_dir_path:
             if cmds.file(q=True,sn=True,shn=True):
-                self.output_path_tx.setText("%s/%s.mp4" % (new_dir_path, 
+                self.output_path_tx.setText("%s/%s.%s" % (new_dir_path, 
                                                         (os.path.splitext(
-                                                            os.path.basename(cmds.file(q=True,sn=True))))[0]))
+                                                            os.path.basename(cmds.file(q=True,sn=True))))[0],suffix_name))
             else:
                 cmds.confirmDialog( t=u'警告', m=u'请先保存文件!!',icn='warning', b=['Yes'], db='Yes', ds='No' )
 
@@ -1404,7 +1519,10 @@ class playblastWidget(QWidget):
         if not current_dir_path:
             current_dir_path = self.output_path_tx.placeholderText()
 
-        new_dir_path = "%s.mp4"% os.path.splitext(cmds.file(q=True,sn=True))[0]
+        suffix_name = self.encoding_container_cmb.currentText()
+
+
+        new_dir_path = "%s.%s"% (os.path.splitext(cmds.file(q=True,sn=True))[0],suffix_name)
         if cmds.file(q=True,sn=True,shn=True):
             self.output_path_tx.setText(new_dir_path)
         else:
@@ -1414,6 +1532,7 @@ class playblastWidget(QWidget):
         self.refresh_cameras()
         self.refresh_resolution()
         self.refresh_frame_range()
+        self.refresh_video_encoders()
 
     def refresh_cameras(self):
         current_camera = self.camera_select_cmb.currentText()
@@ -1494,6 +1613,45 @@ class playblastWidget(QWidget):
                         typ='string')
 
         self._playblast.set_frame_range(frame_range)
+
+    def refresh_video_encoders(self):
+        self.encoding_video_codec_cmb.clear()
+
+        container = self.encoding_container_cmb.currentText()
+        self.encoding_video_codec_cmb.addItems(Playblast.VIDEO_ENCODER_LOOKUP[container])
+
+    def on_video_encoder_changed(self):
+        container = self.encoding_container_cmb.currentText()
+        encoder = self.encoding_video_codec_cmb.currentText()
+
+        if container and encoder:
+            self._playblast.set_encoding(container, encoder)
+
+    def show_encoder_settings_dialog(self):
+        if not self._encoder_settings_dialog:
+            self._encoder_settings_dialog = PlayblastEncoderSettingsDialog(self)
+            self._encoder_settings_dialog.accepted.connect(self.on_encoder_settings_dialog_modified)
+
+        else:
+            encoder = self.encoding_video_codec_cmb.currentText()
+            if encoder == "h264":
+                self._encoder_settings_dialog.set_page("h264")
+
+                h264_settings = self._playblast.get_h264_settings()
+                self._encoder_settings_dialog.set_h264_settings(h264_settings["quality"], h264_settings["preset"])
+            else:
+                self.append_output("[ERROR] Settings page not found for encoder: {0}".format(encoder))
+
+        self._encoder_settings_dialog.show()
+
+    def on_encoder_settings_dialog_modified(self):
+
+        encoder = self.encoding_video_codec_cmb.currentText()
+        if encoder == "h264":
+            h264_settings = self._encoder_settings_dialog.get_h264_settings()
+            self._playblast.set_h264_settings(h264_settings["quality"], h264_settings["preset"])
+        else:
+            self.append_output("[ERROR] Failed to set encoder settings. Unknown encoder: {0}".format(encoder))
 
     def on_log_to_script_editor_changed(self):
         self._playblast.set_maya_logging_enabled(self.log_to_script_editor_cb.isChecked())
@@ -1689,7 +1847,7 @@ class PlayblastUI(QWidget):
         if self.workspace_control_instance.exists():
             self.workspace_control_instance.restore(self)
         else:
-            self.workspace_control_instance.create(self.WINDOW_TITLE, self, ui_script="from playblast_ui import PlayblastUI\nPlayblastUI.display()")
+            self.workspace_control_instance.create(self.WINDOW_TITLE, self, ui_script="from playblast import PlayblastUI\nPlayblastUI.display()")
 
     def on_collapsed_state_changed(self):
         cmds.optionVar(iv=[PlayblastUI.OPT_VAR_GROUP_STATE, self.playblast_wdg.get_collapsed_states()])
